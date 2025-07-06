@@ -1,0 +1,169 @@
+package Analizador;
+
+import java_cup.runtime.Symbol;
+import Analizador.AST.*;
+import java.util.ArrayList;
+import java.util.Collections;
+
+parser code
+{:
+    private Symbol s;
+    
+    public void syntax_error(Symbol s){
+        this.s = s;
+    }
+
+    public Symbol getS(){
+        return this.s;
+    }
+:};
+
+/* LISTA DE TERMINALES COMPLETA Y CORRECTA (SIN 'Linea') */
+terminal Bool, BitAnd, BitOr, Break, Byte, Case, Char, Cin, Coma, Comilla_simple, Comillas,
+    ComparadorIgual, Const, Continue, Corchete_a, Corchete_c, Cout, Default, Define, Decremento,
+    Diferente, Division, DivisionIgual, Do, Double, DobleMayor, DobleMenor, DosPuntos, Else, Endl,
+    ERROR, Et, False, Float, For, Identificador, If, Igual, Int, Include, Incremento, Iostream,
+    Llave_a, Llave_c, Long, Main, MasIgual, MenosIgual, MayorQue, MenorQue, MayorIgual, MenorIgual,
+    Modulo, ModuloIgual, Multiplicacion, MultiplicacionIgual, Namespace, Negador, Numero, Numeral,     
+    O_logico, Parent_a, Parent_c, P_coma, Printf, Punto, Register, Resta, Return, Scanf, Short, Suma, _System,
+    Std, _String, Struct, Switch, Typedef, True, Unsigned, Using, Void, While, Y_logico, STRING_LITERAL, Op_potencia;
+
+/* NON TERMINALES */
+non terminal              DIRECTIVAS, DIRECTIVA;
+non terminal ProgramaNodo  INICIO;
+non terminal SecuenciaNodo SENTENCIAS;
+non terminal Nodo           SENTENCIA, EXPRESION, ASIGNACION, DECLARACION, TIPO_DATO;
+non terminal SiNodo         SENTENCIA_IF;
+non terminal MientrasNodo   SENTENCIA_WHILE;
+non terminal HacerMientrasNodo SENTENCIA_DO_WHILE;
+non terminal ParaNodo       SENTENCIA_FOR;
+non terminal RetornoNodo    SENTENCIA_RETURN;
+non terminal ImprimirNodo   SENTENCIA_PRINT;
+non terminal LeerNodo       SENTENCIA_READ;
+non terminal IdentificadorNodo IDENTIFICADOR_NODO;
+
+
+/* PRECEDENCIA DE OPERADORES */
+precedence left O_logico;
+precedence left Y_logico;
+precedence nonassoc ComparadorIgual, Diferente;
+precedence nonassoc MenorQue, MayorQue, MenorIgual, MayorIgual;
+precedence left Suma, Resta;
+precedence left Multiplicacion, Division, Modulo;
+precedence right Negador;
+
+
+start with INICIO;
+
+/* --- REGLAS GRAMATICALES --- */
+
+// REGLA PARA MANEJAR DIRECTIVAS #include (NUEVO)
+DIRECTIVAS ::= DIRECTIVAS DIRECTIVA
+    | /* epsilon: puede no haber directivas */
+    ;
+
+DIRECTIVA ::= Numeral Include MenorQue Iostream MayorQue
+    | Numeral Include MenorQue Identificador MayorQue
+    | Numeral Include STRING_LITERAL
+    ;
+
+// REGLA INICIO MODIFICADA PARA ACEPTAR DIRECTIVAS AL PRINCIPIO
+INICIO ::= DIRECTIVAS Using Namespace Std P_coma Int Main Parent_a Parent_c Llave_a SENTENCIAS:s Llave_c
+    {: RESULT = new ProgramaNodo(s); :}
+    | DIRECTIVAS Int Main Parent_a Parent_c Llave_a SENTENCIAS:s Llave_c
+    {: RESULT = new ProgramaNodo(s); :}
+    ;
+
+SENTENCIAS ::= SENTENCIAS:seq SENTENCIA:s
+    {: seq.agregarSentencia(s); RESULT = seq; :}
+    | /* epsilon */ 
+    {: RESULT = new SecuenciaNodo(); :}
+    ;
+
+SENTENCIA ::= DECLARACION:d       {: RESULT = d; :}
+    | ASIGNACION:a P_coma          {: RESULT = a; :}
+    | SENTENCIA_IF:i               {: RESULT = i; :}
+    | SENTENCIA_WHILE:w            {: RESULT = w; :}
+    | SENTENCIA_DO_WHILE:dw        {: RESULT = dw; :}
+    | SENTENCIA_FOR:f              {: RESULT = f; :}
+    | SENTENCIA_PRINT:p            {: RESULT = p; :}
+    | SENTENCIA_READ:r             {: RESULT = r; :}
+    | SENTENCIA_RETURN:ret         {: RESULT = ret; :}
+    | P_coma                       {: RESULT = null; :} // Sentencia vacía
+    ;
+
+TIPO_DATO ::= Int     {: RESULT = new IdentificadorNodo("int"); :}
+    | _String {: RESULT = new IdentificadorNodo("string"); :}
+    | Char    {: RESULT = new IdentificadorNodo("char"); :}
+    | Double  {: RESULT = new IdentificadorNodo("double"); :}
+    | Float   {: RESULT = new IdentificadorNodo("float"); :}
+    | Bool    {: RESULT = new IdentificadorNodo("bool"); :}
+    ;
+
+DECLARACION ::= TIPO_DATO:tipo IDENTIFICADOR_NODO:id P_coma
+    {: RESULT = new DeclaracionNodo(((IdentificadorNodo)tipo).getNombre(), id, null); :}
+    | TIPO_DATO:tipo IDENTIFICADOR_NODO:id Igual EXPRESION:e P_coma
+    {: RESULT = new DeclaracionNodo(((IdentificadorNodo)tipo).getNombre(), id, e); :}
+    ;
+
+IDENTIFICADOR_NODO ::= Identificador:id 
+    {: RESULT = new IdentificadorNodo(id.toString()); :};
+
+ASIGNACION ::= IDENTIFICADOR_NODO:id Igual EXPRESION:e
+    {: RESULT = new AsignacionNodo(id, e); :}
+    ;
+
+SENTENCIA_IF ::= If Parent_a EXPRESION:cond Parent_c Llave_a SENTENCIAS:thenBody Llave_c
+    {: RESULT = new SiNodo(cond, thenBody, null); :}
+    | If Parent_a EXPRESION:cond Parent_c Llave_a SENTENCIAS:thenBody Llave_c Else Llave_a SENTENCIAS:elseBody Llave_c
+    {: RESULT = new SiNodo(cond, thenBody, elseBody); :}
+    | If Parent_a EXPRESION:cond Parent_c Llave_a SENTENCIAS:thenBody Llave_c Else SENTENCIA_IF:elseIf
+    {: SecuenciaNodo elseBlock = new SecuenciaNodo(); elseBlock.agregarSentencia(elseIf); RESULT = new SiNodo(cond, thenBody, elseBlock); :}
+    ;
+
+SENTENCIA_WHILE ::= While Parent_a EXPRESION:cond Parent_c Llave_a SENTENCIAS:body Llave_c
+    {: RESULT = new MientrasNodo(cond, body); :}
+    ;
+
+SENTENCIA_DO_WHILE ::= Do Llave_a SENTENCIAS:body Llave_c While Parent_a EXPRESION:cond Parent_c P_coma
+    {: RESULT = new HacerMientrasNodo(body, cond); :}
+    ;
+
+SENTENCIA_FOR ::= For Parent_a ASIGNACION:init P_coma EXPRESION:cond P_coma ASIGNACION:inc Parent_c Llave_a SENTENCIAS:body Llave_c
+    {: RESULT = new ParaNodo(init, cond, inc, body); :}
+    ;
+
+SENTENCIA_PRINT ::= Cout DobleMenor EXPRESION:e P_coma
+    {: RESULT = new ImprimirNodo(new ArrayList<Nodo>(Collections.singletonList(e))); :}
+    ;
+    
+SENTENCIA_READ ::= Cin DobleMayor IDENTIFICADOR_NODO:id P_coma
+    {: RESULT = new LeerNodo(new ArrayList<IdentificadorNodo>(Collections.singletonList(id))); :}
+    ;
+    
+SENTENCIA_RETURN ::= Return EXPRESION:e P_coma
+    {: RESULT = new RetornoNodo(e); :}
+    ;
+
+EXPRESION ::= ASIGNACION:a               {: RESULT = a; :}
+    | EXPRESION:e1 Suma EXPRESION:e2         {: RESULT = new ExpresionBinariaNodo("+", e1, e2); :}
+    | EXPRESION:e1 Resta EXPRESION:e2        {: RESULT = new ExpresionBinariaNodo("-", e1, e2); :}
+    | EXPRESION:e1 Multiplicacion EXPRESION:e2 {: RESULT = new ExpresionBinariaNodo("*", e1, e2); :}
+    | EXPRESION:e1 Division EXPRESION:e2       {: RESULT = new ExpresionBinariaNodo("/", e1, e2); :}
+    | EXPRESION:e1 Modulo EXPRESION:e2         {: RESULT = new ExpresionBinariaNodo("%", e1, e2); :}
+    | EXPRESION:e1 ComparadorIgual EXPRESION:e2 {: RESULT = new ExpresionBinariaNodo("==", e1, e2); :}
+    | EXPRESION:e1 Diferente EXPRESION:e2    {: RESULT = new ExpresionBinariaNodo("!=", e1, e2); :}
+    | EXPRESION:e1 MayorQue EXPRESION:e2     {: RESULT = new ExpresionBinariaNodo(">", e1, e2); :}
+    | EXPRESION:e1 MenorQue EXPRESION:e2     {: RESULT = new ExpresionBinariaNodo("<", e1, e2); :}
+    | EXPRESION:e1 MayorIgual EXPRESION:e2   {: RESULT = new ExpresionBinariaNodo(">=", e1, e2); :}
+    | EXPRESION:e1 MenorIgual EXPRESION:e2   {: RESULT = new ExpresionBinariaNodo("<=", e1, e2); :}
+    | EXPRESION:e1 Y_logico EXPRESION:e2     {: RESULT = new ExpresionBinariaNodo("&&", e1, e2); :}
+    | EXPRESION:e1 O_logico EXPRESION:e2     {: RESULT = new ExpresionBinariaNodo("||", e1, e2); :}
+    | Negador EXPRESION:e                  {: RESULT = new ExpresionUnariaNodo("!", e); :}
+    | IDENTIFICADOR_NODO:id                {: RESULT = id; :}
+    | Numero:num                           {: RESULT = new LiteralNumeroNodo(num.toString()); :}
+    | STRING_LITERAL:str                   {: RESULT = new LiteralStringNodo(str.toString()); :}
+    | True                                 {: RESULT = new LiteralBooleanoNodo(true); :}
+    | False                                {: RESULT = new LiteralBooleanoNodo(false); :}
+    | Parent_a EXPRESION:e Parent_c        {: RESULT = e; :}
+    ;

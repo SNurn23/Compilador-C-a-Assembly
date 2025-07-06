@@ -1,0 +1,23 @@
+# Archivos compilados de Java
+*.class
+*.jar
+
+# Carpetas de NetBeans/Java
+/build/
+/dist/
+/nbproject/private/
+/nbbuild/
+/nbdist/
+
+# Archivos generados por tu compilador
+/src/Archivos/Programa.cpp
+/src/Archivos/Programa.i
+/src/Archivos/Programa.o
+/src/Archivos/Programa.s
+/src/Archivos/Programa.exe
+
+# Archivos de logs y temporales
+*.log
+*.tmp
+*.bak
+*~
